@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.kafka.name }}
+spec:
+  serviceName: {{ .Values.kafka.serviceName }}
+  replicas: {{ .Values.kafka.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.kafka.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.kafka.name }}
+    spec:
+      initContainers:
+      - name: fix-permissions
+        image: busybox
+        command:
+        - sh
+        - -c
+        - |
+          # Remove the problematic lost+found directory
+          rm -rf /var/lib/kafka/data/lost+found 2>/dev/null || true
+          # Create a clean directory for Kafka
+          mkdir -p /var/lib/kafka/data
+          # Set ownership to appuser (uid=1000)
+          chown -R 1000:1000 /var/lib/kafka/data
+          echo "Fixed permissions and removed lost+found"
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/kafka/data
+        securityContext:
+          runAsUser: 0
+      containers:
+      - name: kafka
+        image: "{{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}"
+        command:
+        - sh
+        - -c
+        - |
+          # Extract numeric broker ID from pod name (kafka-0 -> 0, etc.)
+          export KAFKA_BROKER_ID=$(echo ${HOSTNAME##*-})
+          
+          # Get the fully qualified domain name
+          export POD_FQDN=$(hostname -f)
+          
+          # Set advertised listeners with the actual FQDN
+          export KAFKA_ADVERTISED_LISTENERS="PLAINTEXT://${POD_FQDN}:9092"
+          
+          echo "Starting Kafka with:"
+          echo "  KAFKA_BROKER_ID=${KAFKA_BROKER_ID}"
+          echo "  KAFKA_ADVERTISED_LISTENERS=${KAFKA_ADVERTISED_LISTENERS}"
+          echo "  KAFKA_ZOOKEEPER_CONNECT=${KAFKA_ZOOKEEPER_CONNECT}"
+          
+          # Run the original entrypoint
+          exec /etc/confluent/docker/run
+        ports:
+        - containerPort: 9092
+          name: broker
+        env:
+        - name: KAFKA_HEAP_OPTS
+          value: "-Xmx{{ .Values.kafka.heapSize }}"
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: {{ .Values.kafka.zookeeperConnect }}
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://0.0.0.0:9092"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "PLAINTEXT:PLAINTEXT"
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: "PLAINTEXT"
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: {{ .Values.kafka.replicaCount | quote }}
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: {{ .Values.kafka.replicaCount | quote }}
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "2"
+        - name: KAFKA_LOG_RETENTION_HOURS
+          value: "168"
+        - name: KAFKA_LOG_SEGMENT_BYTES
+          value: "1073741824"
+        - name: KAFKA_LOG_DIRS
+          value: "/var/lib/kafka/data"  
+        # Don't set these in env - they'll be set in the command
+        # - name: KAFKA_BROKER_ID
+        # - name: KAFKA_ADVERTISED_LISTENERS
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/kafka/data
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 60
+          periodSeconds: 15
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.kafka.persistence.size }}

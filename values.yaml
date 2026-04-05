@@ -1,0 +1,28 @@
+# values.yaml
+zookeeper:
+  name: zookeeper
+  serviceName: zookeeper-headless
+  replicaCount: 3
+  image:
+    repository: confluentinc/cp-zookeeper
+    tag: 7.0.1
+  heapSize: 512M
+  persistence:
+    size: 5Gi
+  # Add these ports
+  ports:
+    client: 2181
+    follower: 2888
+    leader: 3888
+    
+kafka:
+  name: kafka
+  serviceName: kafka-headless
+  replicaCount: 3
+  image:
+    repository: confluentinc/cp-kafka
+    tag: 7.0.1
+  heapSize: 1G
+  zookeeperConnect: "zookeeper-headless:2181"
+  persistence:
+    size: 10Gi    

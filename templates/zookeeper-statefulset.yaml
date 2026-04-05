@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.zookeeper.name }}
+spec:
+  serviceName: {{ .Values.zookeeper.serviceName }}
+  replicas: {{ .Values.zookeeper.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.zookeeper.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.zookeeper.name }}
+    spec:
+      initContainers:
+      - name: fix-permissions
+        image: busybox
+        command:
+        - sh
+        - -c
+        - |
+          # Set ownership to appuser (uid=1000)
+          chown -R 1000:1000 /var/lib/zookeeper/data
+          # Extract numeric ID from pod name and write myid file
+          ID=$((${HOSTNAME##*-} + 1))
+          echo "Setting ZooKeeper server ID to: $ID"
+          echo $ID > /var/lib/zookeeper/data/myid
+          chown 1000:1000 /var/lib/zookeeper/data/myid
+          chmod 644 /var/lib/zookeeper/data/myid
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/zookeeper/data
+        securityContext:
+          runAsUser: 0  # Run as root to change permissions
+          privileged: true
+      containers:
+      - name: zookeeper
+        image: "{{ .Values.zookeeper.image.repository }}:{{ .Values.zookeeper.image.tag }}"
+        ports:
+        - containerPort: 2181
+          name: client
+        - containerPort: 2888
+          name: follower
+        - containerPort: 3888
+          name: leader
+        env:
+        # Remove ZOOKEEPER_SERVER_ID - we already wrote the myid file
+        - name: ZK_REPLICAS
+          value: {{ .Values.zookeeper.replicaCount | quote }}
+        - name: ZK_HEAP_SIZE
+          value: {{ .Values.zookeeper.heapSize | quote }}
+        - name: ZOOKEEPER_CLIENT_PORT
+          value: "2181"
+        - name: ZOOKEEPER_SERVER_PORT
+          value: "2888"
+        - name: ZOOKEEPER_LEADER_PORT
+          value: "3888"
+        - name: ZOOKEEPER_SERVERS
+          value: ""  # Empty string disables explicit config
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/zookeeper/data
+        securityContext:
+          runAsUser: 1000  # Run as appuser
+          runAsGroup: 1000
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: {{ .Values.zookeeper.persistence.size }}
