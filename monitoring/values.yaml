@@ -1,0 +1,62 @@
+# monitoring-values.yaml
+# Target the secondary node for all monitoring components
+
+grafana:
+  adminPassword: admin123
+  service:
+    type: NodePort
+    nodePort: 30080
+  persistence:
+    enabled: true
+    storageClassName: longhorn  # or local-path if you prefer
+    size: 5Gi
+  # Force Grafana to run on secondary node
+  nodeSelector:
+    role: secondary
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    # Force Prometheus to run on secondary node
+    nodeSelector:
+      role: secondary
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    # Force Alertmanager to run on secondary node
+    nodeSelector:
+      role: secondary
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+
+# Force Prometheus Operator to run on secondary node
+prometheusOperator:
+  nodeSelector:
+    role: secondary
+
+# Force kube-state-metrics to run on secondary node
+kube-state-metrics:
+  nodeSelector:
+    role: secondary
+
+# Node exporter - you might want this on ALL nodes for metrics collection
+prometheus-node-exporter:
+  nodeSelector:
+    role: secondary
+  # Alternative: If you want node metrics from both nodes:
+  # nodeSelector: {}  # Run on all nodes
