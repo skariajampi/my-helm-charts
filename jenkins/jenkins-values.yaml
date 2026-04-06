@@ -1,9 +1,89 @@
+# Default values for jenkins.
+# This is a YAML-formatted file.
+# Declare name/value pairs to be passed into your templates.
+# name: value
+
+## Overrides for generated resource names
+# See templates/_helpers.tpl
+# -- Override the resource name prefix
+# @default -- `Chart.Name`
+nameOverride:
+# -- Override the full resource names
+# @default -- `jenkins-(release-name)` or `jenkins` if the release-name is `jenkins`
+fullnameOverride:
+# -- Override the deployment namespace
+# @default -- `Release.Namespace`
+namespaceOverride:
+
+# For FQDN resolving of the controller service. Change this value to match your existing configuration.
+# ref: https://github.com/kubernetes/dns/blob/master/docs/specification.md
+# -- Override the cluster name for FQDN resolving
+clusterZone: "cluster.local"
+
+# The URL of the Kubernetes API server (K3s default)
+kubernetesURL: "https://kubernetes.default"
+
+# Enables rendering of the helm.sh/chart label to the annotations
+renderHelmLabels: true
+
+# Configures extra labels for the agent all objects
+extraLabels: {}
+
+# Configures extra manifests
+extraObjects: []
 
 controller:
+  # Used for label app.kubernetes.io/component
+  componentName: "jenkins-controller"
+
+  image:
+    # Controller image registry
+    registry: "docker.io"
+    # Controller image repository
+    repository: "jenkins/jenkins"
+    # Controller image tag
+    tag: "lts-jdk17"
+    # Controller image tag label (REQUIRED)
+    tagLabel: jdk21
+    # Controller image pull policy
+    pullPolicy: "Always"
+
   nodeSelector:
     role: secondary
-  serviceType: NodePort
-  nodePort: 32000
+
+  # Service configuration - Use NodePort for access from anywhere
+  serviceEnabled: true
+  serviceType: "NodePort"
+  clusterIp: ""
+  servicePort: 8080
+  targetPort: 8080
+  nodePort: 32000  # Access Jenkins at <laptop-ip>:32000
+  serviceExternalTrafficPolicy: ""
+  publishNotReadyAddresses: false
+
+  # Number of replicas (Jenkins master is a single instance)
+  #replicas: 1
+
+  # Controller image pull secret
+  #imagePullSecretName: ""
+
+  # Lifecycle specification for controller-container
+  #lifecycle: { }
+
+  # Disable use of remember me
+  #disableRememberMe: false
+
+  # Set Number of executors (0 because we use Kubernetes agents)
+  numExecutors: 0
+
+  # Sets the executor mode of the Jenkins node
+  executorMode: "NORMAL"
+
+  # Append Jenkins labels to the controller
+  customJenkinsLabels: [ ]
+
+  hostNetworking: false
+
   admin:
     username: "admin"
     password: "admin123"  # CHANGE THIS PASSWORD!
@@ -11,6 +91,7 @@ controller:
     passwordKey: "jenkins-admin-password"
     createSecret: true
     existingSecret: ""
+
   # ADD RESOURCE LIMITS
   resources:
     requests:
@@ -19,6 +100,175 @@ controller:
     limits:
       cpu: "4000m"
       memory: "8Gi"
+  probes:
+    startupProbe:
+      failureThreshold: 12
+      httpGet:
+        path: '/login'
+        port: http
+      periodSeconds: 10
+      timeoutSeconds: 5
+    livenessProbe:
+      failureThreshold: 5
+      httpGet:
+        path: '/login'
+        port: http
+      periodSeconds: 10
+      timeoutSeconds: 5
+      initialDelaySeconds:
+    readinessProbe:
+      failureThreshold: 3
+      httpGet:
+        path: '/login'
+        port: http
+      periodSeconds: 10
+      timeoutSeconds: 5
+      initialDelaySeconds:
+  # PodDisruptionBudget config
+  podDisruptionBudget:
+    enabled: false
+    apiVersion: "policy/v1beta1"
+    annotations: { }
+    labels: { }
+    maxUnavailable: "0"
+
+  # Agent listener configuration (for Jenkins agents to connect)
+  agentListenerEnabled: true
+  agentListenerPort: 50000
+  agentListenerHostPort: ""
+  agentListenerNodePort: ""
+  agentListenerExternalTrafficPolicy: ""
+  agentListenerLoadBalancerSourceRanges:
+    - 0.0.0.0/0
+  disabledAgentProtocols:
+    - JNLP-connect
+    - JNLP2-connect
+
+  csrf:
+    defaultCrumbIssuer:
+      enabled: true
+      proxyCompatability: true
+
+  agentListenerServiceType: "ClusterIP"
+  agentListenerServiceAnnotations: { }
+  agentListenerLoadBalancerIP: ""
+  legacyRemotingSecurityEnabled: false
+
+  # Load balancer source ranges
+  loadBalancerSourceRanges:
+    - 0.0.0.0/0
+  loadBalancerIP: ""
+
+  # JMX port
+  jmxPort: ""
+
+  # Extra ports
+  extraPorts: [ ]
+
+  # Plugins to install
+  installPlugins:
+    - kubernetes:4423.vb_59f230b_ce53
+    - workflow-aggregator:608.v67378e9d3db_1
+    - git:5.10.1
+    - configuration-as-code:2061.vc08919f7fc37
+    - credentials-binding:latest
+    - blueocean:latest
+    - pipeline-stage-view:latest
+    - docker-workflow:latest
+
+  # Plugin settings
+  installLatestPlugins: true
+  installLatestSpecifiedPlugins: false
+  additionalPlugins: [ ]
+  initializeOnce: false
+  overwritePlugins: false
+  overwritePluginsFromImage: true
+
+  # Project naming strategy
+  projectNamingStrategy: "standard"
+
+  # Markup formatter
+  enableRawHtmlMarkupFormatter: false
+  markupFormatter: "plainText"
+
+  # Script approval
+  scriptApproval: [ ]
+
+  # Init scripts
+  initScripts: { }
+  initConfigMap: ""
+
+  # Existing secret
+  existingSecret: ""
+  additionalExistingSecrets: [ ]
+  additionalSecrets: [ ]
+  secretClaims: [ ]
+
+  # Cloud configuration
+  cloudName: "kubernetes"
+
+  # JCasC configuration
+  JCasC:
+    defaultConfig: true
+    overwriteConfiguration: false
+    configUrls: [ ]
+    configScripts: { }
+    security:
+      apiToken:
+        creationOfLegacyTokenEnabled: false
+        tokenGenerationOnCreationEnabled: false
+        usageStatisticsEnabled: true
+    securityRealm: |-
+      local:
+        allowsSignup: false
+        enableCaptcha: false
+        users:
+        - id: "${chart-admin-username}"
+          name: "Jenkins Admin"
+          password: "${chart-admin-password}"
+    authorizationStrategy: |-
+      loggedInUsersCanDoAnything:
+        allowAnonymousRead: false
+    configMapAnnotations: { }
+
+  # Custom init containers
+  customInitContainers: [ ]
+
+  # Sidecars
+  sidecars:
+    configAutoReload:
+      enabled: true
+      image:
+        registry: docker.io
+        repository: kiwigrid/k8s-sidecar
+        tag: 2.5.0
+      imagePullPolicy: IfNotPresent
+      healthPort: 8060
+      resources: { }
+      additionalVolumeMounts: [ ]
+      logging:
+        configuration:
+          override: false
+          logLevel: INFO
+          formatter: JSON
+          logToConsole: true
+          logToFile: false
+          maxBytes: 1024
+          backupCount: 3
+      scheme: http
+      skipTlsVerify: false
+      reqRetryConnect: 10
+      sleepTime:
+      envFrom: [ ]
+      env: [ ]
+      sshTcpPort: 1044
+      folder: "/var/jenkins_home/casc_configs"
+      containerSecurityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+    additionalSidecarContainers: [ ]
+
+
 
 agent:
   enabled: true
@@ -33,9 +283,62 @@ agent:
       cpu: "1000m"
       memory: "1Gi"
 
+  livenessProbe: { }
+  alwaysPullImage: false
+  restrictedPssSecurityContext: false
+
+  # Agents terminate after builds to save resources
+  podRetention: "Never"
+  showRawYaml: true
+  volumes: [ ]
+  workspaceVolume: { }
+  envVars: [ ]
+  secretEnvVars: [ ]
+
+
+#  podTemplates:
+#
+#    maven: |
+#      - name: "maven"
+#        label: "maven"
+#        serviceAccount: "jenkins"
+#        nodeSelector:
+#          role: secondary
+#        containers:
+#          - name: "jnlp"
+#            image: "jenkins/inbound-agent:latest"
+#            imagePullPolicy: "Always"
+#            resources:
+#              requests:
+#                cpu: "500m"
+#                memory: "512Mi"
+#          - name: "maven"
+#            image: "maven:3.9-eclipse-temurin-17"
+#            imagePullPolicy: "Always"
+#            command: "sleep"
+#            args: "infinity"
+#            resources:
+#              requests:
+#                cpu: "1000m"
+#                memory: "2Gi"
+#              limits:
+#                cpu: "2000m"
+#                memory: "4Gi"
+
+
+
 persistence:
   enabled: true
-  size: 10Gi
+  existingClaim: ""
+  storageClass: "longhorn"  # K3s default storage class
+  annotations: { }
+  labels: { }
+  accessMode: "ReadWriteOnce"
+  size: "10Gi"  # Jenkins home directory on laptop's NVMe
+  dataSource: { }
+  subPath: ""
+  volumes: [ ]
+  mounts: [ ]
 
 rbac:
   create: true
