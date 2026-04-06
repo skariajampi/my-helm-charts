@@ -1,0 +1,25 @@
+
+controller:
+  nodeSelector:
+    role: secondary
+  serviceType: NodePort
+  nodePort: 32000
+  admin:
+    username: "admin"
+    password: "admin123"  # CHANGE THIS PASSWORD!
+    userKey: "jenkins-admin-user"
+    passwordKey: "jenkins-admin-password"
+    createSecret: true
+    existingSecret: ""
+
+agent:
+  enabled: true
+  nodeSelector:
+    role: secondary
+
+persistence:
+  enabled: true
+  size: 10Gi
+
+rbac:
+  create: true

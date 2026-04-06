@@ -1,4 +1,4 @@
-# monitoring-values.yaml
+
 # Target the secondary node for all monitoring components
 
 grafana:
