@@ -1,0 +1,161 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  nodeSelector:
+    role: secondary
+  containers:
+  - name: jnlp
+    image: jenkins/inbound-agent:latest
+    args: ["$(JENKINS_SECRET)", "$(JENKINS_NAME)"]
+  - name: maven
+    image: maven:3.9-eclipse-temurin-17
+    command: ["sleep"]
+    args: ["infinity"]
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1000m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+  restartPolicy: Never
+'''
+        }
+    }
+    stages {
+        stage('Check Maven') {
+            steps {
+                container('maven') {
+                    sh '''
+                        echo "================================="
+                        echo "Maven version:"
+                        mvn --version
+                        echo "================================="
+                        echo "Java version:"
+                        java --version
+                        echo "================================="
+                        echo "Working directory:"
+                        pwd
+                        echo "================================="
+                    '''
+                }
+            }
+        }
+        stage('Test Maven Build') {
+            steps {
+                container('maven') {
+                    // Create a simple test project
+                    sh '''
+                        cat > pom.xml << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.test</groupId>
+    <artifactId>test-app</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
+EOF
+                    '''
+                }
+            }
+        }
+        stage('Compile Code') {
+            steps {
+                container('maven') {
+                    sh '''
+                        mkdir -p src/main/java/com/test
+                        cat > src/main/java/com/test/App.java << 'EOF'
+package com.test;
+public class App {
+    public static void main(String[] args) {
+        System.out.println("Hello from Jenkins Maven build!");
+    }
+    public String getMessage() {
+        return "Hello Maven!";
+    }
+}
+EOF
+                    '''
+                }
+            }
+        }
+        stage('Run Maven Build') {
+            steps {
+                container('maven') {
+                    sh 'mvn clean compile'
+                }
+            }
+        }
+        stage('Run Tests') {
+            steps {
+                container('maven') {
+                    sh '''
+                        mkdir -p src/test/java/com/test
+                        cat > src/test/java/com/test/AppTest.java << 'EOF'
+package com.test;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+class AppTest {
+    @Test
+    void testGetMessage() {
+        App app = new App();
+        assertEquals("Hello Maven!", app.getMessage());
+    }
+}
+EOF
+                    '''
+                }
+            }
+        }
+        stage('Package') {
+            steps {
+                container('maven') {
+                    sh 'mvn package'
+                }
+            }
+        }
+        stage('Verify Build') {
+            steps {
+                container('maven') {
+                    sh '''
+                        echo "================================="
+                        echo "Build successful!"
+                        echo "JAR file:"
+                        ls -la target/*.jar
+                        echo "================================="
+                    '''
+                }
+            }
+        }
+    }
+    post {
+        always {
+            echo 'Pipeline completed!'
+        }
+        success {
+            echo 'Maven build succeeded!'
+        }
+        failure {
+            echo 'Maven build failed!'
+        }
+    }
+}
