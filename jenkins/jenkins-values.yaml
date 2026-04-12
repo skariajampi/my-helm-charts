@@ -176,6 +176,7 @@ controller:
     - pipeline-stage-view:latest
     - docker-workflow:latest
     - ws-cleanup:0.49
+    - pipeline-utility-steps:2.20.0
 
   # Plugin settings
   installLatestPlugins: true
