@@ -175,6 +175,7 @@ controller:
     - blueocean:latest
     - pipeline-stage-view:latest
     - docker-workflow:latest
+    - ws-cleanup:0.49
 
   # Plugin settings
   installLatestPlugins: true
