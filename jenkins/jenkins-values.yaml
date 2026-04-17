@@ -172,7 +172,6 @@ controller:
     - git:5.10.1
     - configuration-as-code:2061.vc08919f7fc37
     - credentials-binding:latest
-    - blueocean:latest
     - pipeline-stage-view:latest
     - docker-workflow:latest
     - ws-cleanup:0.49
